@@ -3,6 +3,7 @@ import re
 from datetime import datetime, timedelta
 from openpyxl import load_workbook
 import io
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Jobcard Auto-Filler", layout="centered")
 st.title("🔧 Jobcard Auto-Filler Web App")
@@ -141,9 +142,9 @@ if uploaded_template and email_body and st.session_state.continue_pressed:
         ws['U12'] = created_date
         ws['V12'] = st.session_state.start_time
         ws['V13'] = st.session_state.end_time
+        ws['B31'] = engineer_notes  # updated location for engineer notes
         ws['D22'] = dell_ref
         ws['P11'] = kilometres
-        ws['S16'] = engineer_notes
 
         for i, (part_num, desc, qty, is_scr) in enumerate(parts):
             row = 22 + i
@@ -158,9 +159,58 @@ if uploaded_template and email_body and st.session_state.continue_pressed:
         output.seek(0)
 
         st.success("🎉 Jobcard generated!")
+
+        # Excel download button
         st.download_button(
             label="📥 Download Completed Jobcard (Excel)",
             data=output,
             file_name=f"{dell_ref}_{work_order}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
+        # Prepare HTML summary for PDF download
+        html_summary = f"""
+        <div id="jobcard-summary" style="font-family:Arial, sans-serif; padding:20px;">
+            <h2>Jobcard Summary</h2>
+            <p><b>Jobcard Number:</b> {jobcard_number}</p>
+            <p><b>Work Order:</b> {work_order}</p>
+            <p><b>Serial Number:</b> {serial_number}</p>
+            <p><b>Model:</b> {model}</p>
+            <p><b>CSR Number:</b> {csr}</p>
+            <p><b>Customer Name:</b> {customer_name}</p>
+            <p><b>Contact Person:</b> {contact_person}</p>
+            <p><b>Address:</b> {address}</p>
+            <p><b>Dell Ref:</b> {dell_ref}</p>
+            <p><b>Created Date:</b> {created_date}</p>
+            <p><b>Kilometres Travelled:</b> {kilometres}</p>
+            <p><b>Start Time:</b> {st.session_state.start_time}</p>
+            <p><b>End Time:</b> {st.session_state.end_time}</p>
+            <p><b>Engineer Notes:</b> {engineer_notes}</p>
+            <h3>Parts:</h3>
+            <ul>
+        """
+
+        for i, (part_num, desc, qty, is_scr) in enumerate(parts):
+            scr_text = " (SCR)" if is_scr else ""
+            html_summary += f"<li>{part_num} - {desc} - Qty: {qty}{scr_text}</li>"
+
+        html_summary += "</ul></div>"
+
+        # Embed html2pdf.js to allow client-side PDF download
+        html_for_component = f"""
+        {html_summary}
+        <button id="download-pdf" style="font-size:18px; padding:8px 12px; margin-top:10px;">📄 Download Jobcard PDF</button>
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+        <script>
+        const element = document.getElementById('jobcard-summary');
+        document.getElementById('download-pdf').addEventListener('click', () => {{
+            html2pdf().from(element).set({{margin:1, filename: '{jobcard_number}.pdf', html2canvas: {{ scale: 2 }}, jsPDF: {{ unit: 'in', format: 'a4', orientation: 'portrait' }} }}).save();
+        }});
+        </script>
+        """
+
+        components.html(html_for_component, height=450)
+
+else:
+    st.info("Please upload the Excel template and paste the email body, then click Continue.")
